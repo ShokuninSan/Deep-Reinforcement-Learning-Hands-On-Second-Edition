@@ -11,3 +11,5 @@ tensorflow
 nltk>=3.4.5
 pybullet>=2.5.7
 ptan>=0.6
+gym-minigrid
+gym-wrappers
