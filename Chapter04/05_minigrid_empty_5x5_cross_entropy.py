@@ -18,16 +18,30 @@ GAMMA = 0.9
 
 
 class FlatteningFullyObsWrapper(gym.ObservationWrapper):
+
     def __init__(self, env):
         super(FlatteningFullyObsWrapper, self).__init__(env)
-        self.observation_space = \
-            gym.spaces.Box(0, 255, (np.product(env.observation_space['image'].shape), ), dtype='uint8')
+        self.observation_space = gym.spaces.Box(
+            0, 255,
+            (np.product(env.observation_space['image'].shape), ),
+            dtype='uint8')
 
     def observation(self, observation):
         return observation['image'].reshape(-1,)
 
 
+class ReduceActionsWrapper(gym.ActionWrapper):
+
+    def __init__(self, env):
+        super(ReduceActionsWrapper, self).__init__(env)
+        self.action_space = gym.spaces.Discrete(3)
+
+    def action(self, act):
+        return act
+
+
 class Net(nn.Module):
+
     def __init__(self, obs_size, hidden_size, n_actions):
         super(Net, self).__init__()
         self.net = nn.Sequential(
@@ -91,6 +105,7 @@ def filter_batch(batch, percentile):
 if __name__ == "__main__":
     env = FullyObsWrapper(gym.make("MiniGrid-Empty-5x5-v0"))
     env = FlatteningFullyObsWrapper(env)
+    env = ReduceActionsWrapper(env)
     env = Monitor(env, directory="mon", force=True)
     obs_size = env.observation_space.shape[0]
     n_actions = env.action_space.n
