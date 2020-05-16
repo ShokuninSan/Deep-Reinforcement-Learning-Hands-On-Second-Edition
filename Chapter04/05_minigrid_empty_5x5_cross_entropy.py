@@ -11,7 +11,7 @@ from gym.wrappers import Monitor
 from gym_minigrid.wrappers import FullyObsWrapper
 
 
-HIDDEN_SIZE = 256
+HIDDEN_SIZE = 128
 BATCH_SIZE = 100
 PERCENTILE = 30
 GAMMA = 0.9
@@ -23,11 +23,11 @@ class FlatteningFullyObsWrapper(gym.ObservationWrapper):
         super(FlatteningFullyObsWrapper, self).__init__(env)
         self.observation_space = gym.spaces.Box(
             0, 255,
-            (np.product(env.observation_space['image'].shape), ),
+            (np.product(env.observation_space['image'].shape[:-1]),),
             dtype='uint8')
 
     def observation(self, observation):
-        return observation['image'].reshape(-1,)
+        return observation['image'][:, :, 0].reshape(-1,)
 
 
 class ReduceActionsWrapper(gym.ActionWrapper):
