@@ -30,10 +30,10 @@ class FlatteningFullyObsWrapper(gym.ObservationWrapper):
         return observation['image'][:, :, 0].reshape(-1,)
 
 
-class ReducingActionsWrapper(gym.ActionWrapper):
+class ReducingActionWrapper(gym.ActionWrapper):
 
     def __init__(self, env):
-        super(ReducingActionsWrapper, self).__init__(env)
+        super(ReducingActionWrapper, self).__init__(env)
         self.action_space = gym.spaces.Discrete(3)
 
     def action(self, act):
@@ -105,7 +105,7 @@ def filter_batch(batch, percentile):
 if __name__ == "__main__":
     env = FullyObsWrapper(gym.make("MiniGrid-Empty-5x5-v0"))
     env = FlatteningFullyObsWrapper(env)
-    env = ReducingActionsWrapper(env)
+    env = ReducingActionWrapper(env)
     env = Monitor(env, directory="mon", force=True)
     obs_size = env.observation_space.shape[0]
     n_actions = env.action_space.n
