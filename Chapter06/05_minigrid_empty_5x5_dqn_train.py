@@ -16,9 +16,9 @@ from tensorboardX import SummaryWriter
 
 
 DEFAULT_ENV_NAME = "MiniGrid-Empty-5x5-v0"
-MEAN_REWARD_BOUND = 0.8
+MEAN_REWARD_BOUND = 0.9
 
-HIDDEN_SIZE = 128
+HIDDEN_SIZE = 64
 GAMMA = 0.99
 BATCH_SIZE = 32
 REPLAY_SIZE = 10000
@@ -26,7 +26,7 @@ LEARNING_RATE = 1e-4
 SYNC_TARGET_FRAMES = 1000
 REPLAY_START_SIZE = 10000
 
-EPSILON_DECAY_LAST_FRAME = 150000
+EPSILON_DECAY_LAST_FRAME = 1500000
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
 
@@ -36,10 +36,10 @@ Experience = collections.namedtuple(
                                'done', 'new_state'])
 
 
-class FlatteningFullyObsWrapper(gym.ObservationWrapper):
+class FlatteningObsWrapper(gym.ObservationWrapper):
 
     def __init__(self, env):
-        super(FlatteningFullyObsWrapper, self).__init__(env)
+        super(FlatteningObsWrapper, self).__init__(env)
         self.observation_space = gym.spaces.Box(
             0, 255,
             (np.product(env.observation_space['image'].shape[:-1]),),
@@ -50,7 +50,13 @@ class FlatteningFullyObsWrapper(gym.ObservationWrapper):
 
 
 class ReducingActionSpaceWrapper(gym.ActionWrapper):
+    """
+    Reduce actions to:
 
+    left = 0
+    right = 1
+    forward = 2
+    """
     def __init__(self, env):
         super(ReducingActionSpaceWrapper, self).__init__(env)
         self.action_space = gym.spaces.Discrete(3)
@@ -95,6 +101,7 @@ class ExperienceBuffer:
 
 
 class Agent:
+
     def __init__(self, env, exp_buffer):
         self.env = env
         self.exp_buffer = exp_buffer
@@ -150,14 +157,12 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
 
     expected_state_action_values = next_state_values * GAMMA + \
                                    rewards_v
-    return nn.MSELoss()(state_action_values,
-                        expected_state_action_values)
+    return nn.MSELoss()(state_action_values, expected_state_action_values)
 
 
 def make_env(env_name):
     env = gym.make(env_name)
-    env = FullyObsWrapper(env)
-    env = FlatteningFullyObsWrapper(env)
+    env = FlatteningObsWrapper(env)
     env = ReducingActionSpaceWrapper(env)
     return env
 
@@ -173,6 +178,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
 
     env = make_env(args.env)
+    env = Monitor(env, directory="mon", force=True)
 
     net = DQN(env.observation_space.shape[0],
               HIDDEN_SIZE,
@@ -189,49 +195,45 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
     total_rewards = []
-    n_agent_steps = 0
-    ts_frame = 0
-    ts = time.time()
     best_m_reward = None
+    iter_no = 0
 
     while True:
-        n_agent_steps += 1
+        iter_no += 1
+        epsilon = max(EPSILON_FINAL,
+                      EPSILON_START - iter_no / EPSILON_DECAY_LAST_FRAME)
 
         reward = agent.play_step(net, epsilon, device=device)
-
         if reward is not None:
             total_rewards.append(reward)
-
             m_reward = np.mean(total_rewards[-100:])
-            print("%d: steps done %d games, reward %.3f, "
-                  "eps %.2f" % (
-                      n_agent_steps, len(total_rewards), m_reward, epsilon,
-            ))
 
-            writer.add_scalar("epsilon", epsilon, n_agent_steps)
-            writer.add_scalar("reward_100", m_reward, n_agent_steps)
-            writer.add_scalar("reward", reward, n_agent_steps)
+            writer.add_scalar("epsilon", epsilon, iter_no)
+            writer.add_scalar("reward_100", m_reward, iter_no)
+            writer.add_scalar("reward", reward, iter_no)
 
             if best_m_reward is None or best_m_reward < m_reward:
-                torch.save(net.state_dict(), args.env +
-                           "-best_%.0f.dat" % m_reward)
+                torch.save(net.state_dict(), args.env + "-best_%.0f.dat" % m_reward)
                 if best_m_reward is not None:
-                    print("Best reward updated %.3f -> %.3f" % (
-                        best_m_reward, m_reward))
+                    print("Best reward updated %.3f -> %.3f" %
+                          (best_m_reward, m_reward))
                 best_m_reward = m_reward
 
-                tgt_net.load_state_dict(net.state_dict())
-
             if m_reward > MEAN_REWARD_BOUND:
-                print("Solved in %d steps!" % n_agent_steps)
+                print("Solved in %d iterations!" % iter_no)
                 break
 
-            epsilon = max(EPSILON_FINAL, EPSILON_START -
-                          n_agent_steps / EPSILON_DECAY_LAST_FRAME)
+        # make sure that we have enough samples for subsequent steps
+        if len(buffer) < REPLAY_START_SIZE:
+            continue
 
-            optimizer.zero_grad()
-            batch = buffer.sample(BATCH_SIZE)
-            loss_t = calc_loss(batch, net, tgt_net, device=device)
-            loss_t.backward()
-            optimizer.step()
+        if iter_no % SYNC_TARGET_FRAMES == 0:
+            tgt_net.load_state_dict(net.state_dict())
+
+        optimizer.zero_grad()
+        batch = buffer.sample(BATCH_SIZE)
+        loss_t = calc_loss(batch, net, tgt_net, device=device)
+        loss_t.backward()
+        optimizer.step()
+
     writer.close()
