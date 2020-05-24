@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     env = make_env(args.env)
     if args.record:
-        env = gym.wrappers.Monitor(env, args.record)
+        env = gym.wrappers.Monitor(env, args.record, force=True)
     net = DQN(env.observation_space.shape[0], HIDDEN_SIZE, env.action_space.n)
     state = torch.load(args.model, map_location=lambda stg, _: stg)
     net.load_state_dict(state)
