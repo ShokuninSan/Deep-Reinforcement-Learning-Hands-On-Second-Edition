@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
+import gym_minigrid
 
 from lib.minigrid import DQN, make_env, DEFAULT_ENV_NAME, HIDDEN_SIZE
 
